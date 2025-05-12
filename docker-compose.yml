@@ -1,26 +1,11 @@
 services:
-
-  # The 'setup' service runs a one-off script which initializes users inside
-  # Elasticsearch — such as 'logstash_internal' and 'kibana_system' — with the
-  # values of the passwords defined in the '.env' file. It also creates the
-  # roles required by some of these users.
-  #
-  # This task only needs to be performed once, during the *initial* startup of
-  # the stack. Any subsequent run will reset the passwords of existing users to
-  # the values defined inside the '.env' file, and the built-in roles to their
-  # default permissions.
-  #
-  # By default, it is excluded from the services started by 'docker compose up'
-  # due to the non-default profile it belongs to. To run it, either provide the
-  # '--profile=setup' CLI flag to Compose commands, or "up" the service by name
-  # such as 'docker compose up setup'.
   setup:
     profiles:
       - setup
     build:
       context: setup/
       args:
-        ELASTIC_VERSION: ${ELASTIC_VERSION}
+        ELASTIC_IMAGE: ${ELASTICSEARCH_IMAGE}
     init: true
     volumes:
       - ./setup/entrypoint.sh:/entrypoint.sh:ro,Z
@@ -30,11 +15,6 @@ services:
       ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:-}
       LOGSTASH_INTERNAL_PASSWORD: ${LOGSTASH_INTERNAL_PASSWORD:-}
       KIBANA_SYSTEM_PASSWORD: ${KIBANA_SYSTEM_PASSWORD:-}
-      METRICBEAT_INTERNAL_PASSWORD: ${METRICBEAT_INTERNAL_PASSWORD:-}
-      FILEBEAT_INTERNAL_PASSWORD: ${FILEBEAT_INTERNAL_PASSWORD:-}
-      HEARTBEAT_INTERNAL_PASSWORD: ${HEARTBEAT_INTERNAL_PASSWORD:-}
-      MONITORING_INTERNAL_PASSWORD: ${MONITORING_INTERNAL_PASSWORD:-}
-      BEATS_SYSTEM_PASSWORD: ${BEATS_SYSTEM_PASSWORD:-}
     networks:
       - elk
     depends_on:
@@ -44,23 +24,24 @@ services:
     build:
       context: elasticsearch/
       args:
-        ELASTIC_VERSION: ${ELASTIC_VERSION}
+        ELASTIC_IMAGE: ${ELASTICSEARCH_IMAGE}
     volumes:
       - ./elasticsearch/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro,Z
       - elasticsearch:/usr/share/elasticsearch/data:Z
     ports:
-      - 9200:9200
-      - 9300:9300
+      - ${ELASTICSEARCH_PORT_9200}:9200
+      - ${ELASTICSEARCH_PORT_9300}:9300
     environment:
       node.name: elasticsearch
       ES_JAVA_OPTS: -Xms512m -Xmx512m
-      # Bootstrap password.
-      # Used to initialize the keystore during the initial startup of
-      # Elasticsearch. Ignored on subsequent runs.
       ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:-}
-      # Use single node discovery in order to disable production mode and avoid bootstrap checks.
-      # see: https://www.elastic.co/docs/deploy-manage/deploy/self-managed/bootstrap-checks
       discovery.type: single-node
+    healthcheck:
+      test: ["CMD-SHELL", "curl --silent --fail -u elastic:${ELASTIC_PASSWORD} http://localhost:9200/_cluster/health || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
     networks:
       - elk
     restart: unless-stopped
@@ -69,18 +50,24 @@ services:
     build:
       context: logstash/
       args:
-        ELASTIC_VERSION: ${ELASTIC_VERSION}
+        LOGSTASH_IMAGE: ${LOGSTASH_IMAGE}
     volumes:
       - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml:ro,Z
       - ./logstash/pipeline:/usr/share/logstash/pipeline:ro,Z
     ports:
-      - 5044:5044
-      - 50000:50000/tcp
-      - 50000:50000/udp
-      - 9600:9600
+      - ${LOGSTASH_PORT_5044}:5044
+      - ${LOGSTASH_PORT_50000}:50000/tcp
+      - ${LOGSTASH_PORT_50000}:50000/udp
+      - ${LOGSTASH_PORT_9600}:9600
     environment:
       LS_JAVA_OPTS: -Xms256m -Xmx256m
       LOGSTASH_INTERNAL_PASSWORD: ${LOGSTASH_INTERNAL_PASSWORD:-}
+    healthcheck:
+      test: ["CMD-SHELL", "curl --silent --fail http://localhost:9600 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
     networks:
       - elk
     depends_on:
@@ -91,13 +78,19 @@ services:
     build:
       context: kibana/
       args:
-        ELASTIC_VERSION: ${ELASTIC_VERSION}
+        KIBANA_IMAGE: ${KIBANA_IMAGE}
     volumes:
       - ./kibana/config/kibana.yml:/usr/share/kibana/config/kibana.yml:ro,Z
     ports:
-      - 5601:5601
+      - ${KIBANA_PORT_5601}:5601
     environment:
       KIBANA_SYSTEM_PASSWORD: ${KIBANA_SYSTEM_PASSWORD:-}
+    healthcheck:
+      test: ["CMD-SHELL", "curl --silent --fail http://localhost:5601/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
     networks:
       - elk
     depends_on:

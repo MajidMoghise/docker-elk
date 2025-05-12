@@ -1,6 +1,6 @@
-ARG ELASTIC_VERSION
+ARG ELASTIC_IMAGE
 
 # https://www.docker.elastic.co/
-FROM docker.elastic.co/elasticsearch/elasticsearch:${ELASTIC_VERSION:-9.0.1}
+FROM ${ELASTIC_IMAGE}
 
 ENTRYPOINT ["/entrypoint.sh"]
