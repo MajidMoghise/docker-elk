@@ -1,0 +1,16 @@
+
+*.log
+docker-compose.override.yml
+docker-compose.override.yaml
+.env.local
+.env.production
+.env.test
+secrets.env
+secrets/
+.secrets
+.vs/
+
+volumes/
+*_data/
+db_data/
+cache/
